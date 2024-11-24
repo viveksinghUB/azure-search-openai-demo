@@ -10,6 +10,7 @@ from azure.identity.aio import AzureDeveloperCliCredential, get_bearer_token_pro
 
 from load_azd_env import load_azd_env
 from prepdocslib.blobmanager import BlobManager
+from prepdocslib.csvparser import CsvParser
 from prepdocslib.embeddings import (
     AzureOpenAIEmbeddingService,
     ImageEmbeddings,
@@ -114,6 +115,7 @@ def setup_embeddings_service(
     openai_custom_url: Union[str, None],
     openai_deployment: Union[str, None],
     openai_dimensions: int,
+    openai_api_version: str,
     openai_key: Union[str, None],
     openai_org: Union[str, None],
     disable_vectors: bool = False,
@@ -133,6 +135,7 @@ def setup_embeddings_service(
             open_ai_deployment=openai_deployment,
             open_ai_model_name=openai_model_name,
             open_ai_dimensions=openai_dimensions,
+            open_ai_api_version=openai_api_version,
             credential=azure_open_ai_credential,
             disable_batch=disable_batch_vectors,
         )
@@ -190,6 +193,7 @@ def setup_file_processors(
         ".json": FileProcessor(JsonParser(), SimpleTextSplitter()),
         ".md": FileProcessor(TextParser(), sentence_text_splitter),
         ".txt": FileProcessor(TextParser(), sentence_text_splitter),
+        ".csv": FileProcessor(CsvParser(), sentence_text_splitter),
     }
     # These require either a Python package or Document Intelligence
     if pdf_parser is not None:
@@ -364,6 +368,8 @@ if __name__ == "__main__":
         openai_service=os.getenv("AZURE_OPENAI_SERVICE"),
         openai_custom_url=os.getenv("AZURE_OPENAI_CUSTOM_URL"),
         openai_deployment=os.getenv("AZURE_OPENAI_EMB_DEPLOYMENT"),
+        # https://learn.microsoft.com/azure/ai-services/openai/api-version-deprecation#latest-ga-api-release
+        openai_api_version=os.getenv("AZURE_OPENAI_API_VERSION") or "2024-06-01",
         openai_dimensions=openai_dimensions,
         openai_key=clean_key_if_exists(openai_key),
         openai_org=os.getenv("OPENAI_ORGANIZATION"),
@@ -373,6 +379,10 @@ if __name__ == "__main__":
 
     ingestion_strategy: Strategy
     if use_int_vectorization:
+
+        if not openai_embeddings_service or not isinstance(openai_embeddings_service, AzureOpenAIEmbeddingService):
+            raise Exception("Integrated vectorization strategy requires an Azure OpenAI embeddings service")
+
         ingestion_strategy = IntegratedVectorizerStrategy(
             search_info=search_info,
             list_file_strategy=list_file_strategy,
